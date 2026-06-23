@@ -84,6 +84,16 @@ async def index() -> HTMLResponse:
     return HTMLResponse(content=content)
 
 
+@app.get("/health")
+async def health() -> JSONResponse:
+    return make_json_response({"ok": True, "status": "ok"})
+
+
+@app.get("/api/health")
+async def api_health() -> JSONResponse:
+    return make_json_response({"ok": True, "status": "ok"})
+
+
 @app.get("/static/{file_path:path}")
 async def static_files(file_path: str) -> FileResponse:
     safe_path = (STATIC_DIR / file_path).resolve()
@@ -275,6 +285,6 @@ async def api_router(request: Request, path: str) -> Response:
         return make_json_response({"ok": False, "error": f"Error interno: {exc}"}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
 
-@app.get("/health")
-async def health() -> JSONResponse:
-    return make_json_response({"ok": True, "status": "ok"})
+@app.get("/{path:path}", include_in_schema=False)
+async def catch_all(path: str) -> HTMLResponse:
+    return await index()
