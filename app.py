@@ -9,6 +9,7 @@ import os
 import re
 import secrets
 import sqlite3
+import tempfile
 import time
 from datetime import datetime
 from http import HTTPStatus
@@ -32,7 +33,8 @@ from juegos import ACTIONS, GAMES, PUBLIC, STARTERS
 
 ROOT_DIR = Path(__file__).resolve().parent
 STATIC_DIR = ROOT_DIR / "static"
-DATA_DIR = ROOT_DIR / "data"
+IS_SERVERLESS = bool(os.getenv("VERCEL")) or bool(os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+DATA_DIR = Path(tempfile.gettempdir()) / "los_idos_data" if IS_SERVERLESS else ROOT_DIR / "data"
 DB_PATH = DATA_DIR / "los_idos.db"
 HOST = "127.0.0.1"
 PORT = 8000
