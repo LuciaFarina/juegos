@@ -46,7 +46,6 @@ USE_MONGO = bool(MONGO_URI) and MongoClient is not None and ReturnDocument is no
 def utc_now() -> str:
     return datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
-
 class DBStore:
     def __init__(self) -> None:
         self.backend = "mongo" if USE_MONGO else "sqlite"
