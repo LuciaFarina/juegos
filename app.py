@@ -7,11 +7,16 @@ import html
 import json
 import os
 import re
-import secrets
+import secretsa
 import sqlite3
 import tempfile
 import time
 from dotenv import load_dotenv
+
+try:
+    import certifi
+except ImportError:
+    certifi = None
 from datetime import datetime
 from http import HTTPStatus
 from http.cookies import SimpleCookie
@@ -22,12 +27,13 @@ from urllib.parse import parse_qs, urlparse
 
 try:
     from pymongo import MongoClient, ReturnDocument
-    from pymongo.errors import ConfigurationError, OperationFailure
+    from pymongo.errors import ConfigurationError, OperationFailure, DuplicateKeyError
 except ImportError:
     MongoClient = None
     ReturnDocument = None
     ConfigurationError = None
     OperationFailure = None
+    DuplicateKeyError = None
 
 from api_error import ApiError
 from juegos import ACTIONS, GAMES, PUBLIC, STARTERS
@@ -77,12 +83,21 @@ def connect_db() -> DBStore:
         if MongoClient is None or ReturnDocument is None:
             raise RuntimeError("pymongo no está instalado. Ejecutá: pip install pymongo")
         try:
-            store.mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+            mongo_options = {
+                "serverSelectionTimeoutMS": 20000,
+                "connectTimeoutMS": 20000,
+                "socketTimeoutMS": 20000,
+                "tls": True,
+            }
+            if certifi is not None:
+                mongo_options["tlsCAFile"] = certifi.where()
+
+            store.mongo_client = MongoClient(MONGO_URI, **mongo_options)
             store.mongo_db = store.mongo_client[MONGO_DB_NAME]
             store.mongo_client.admin.command("ping")
         except Exception as exc:
             raise RuntimeError(
-                f"No se pudo conectar a MongoDB usando MONGODB_URI={MONGO_URI!r} y MONGODB_DB={MONGO_DB_NAME!r}: {exc}"
+                f"No se pudo conectar a MongoDB usando MONGODB_URI configurada y MONGODB_DB={MONGO_DB_NAME!r}: {exc}"
             ) from exc
     else:
         DATA_DIR.mkdir(exist_ok=True)
@@ -118,6 +133,11 @@ def migrate_sqlite_to_mongo() -> None:
     db.game_sessions.create_index("id", unique=True)
     db.scores.create_index([("user_id", 1), ("created_at", -1)])
     db.scores.create_index("id", unique=True)
+    db.scores.create_index(
+        "game_session_id",
+        unique=True,
+        partialFilterExpression={"game_session_id": {"$type": "int"}},
+    )
 
     for row in users:
         db.users.update_one(
@@ -326,12 +346,43 @@ def user_from_token(store: DBStore, token: str | None) -> Any:
 
 
 def next_sequence(store: DBStore, name: str) -> int:
+    """
+    Genera IDs numéricos para MongoDB de forma segura.
+
+    Si la colección counters no existe o fue borrada, se reconstruye desde
+    el ID máximo real de la colección correspondiente antes de incrementar.
+    Esto evita errores E11000 duplicate key en Vercel/MongoDB.
+    """
     if store.backend != "mongo":
         return 0
+
+    counter = store.mongo_db.counters.find_one({"_id": name})
+
+    if not counter:
+        collection = store.mongo_db[name]
+
+        if name == "users":
+            last_doc = collection.find_one(
+                {"_id": {"$type": "int"}},
+                sort=[("_id", -1)],
+            )
+            current_max = int(last_doc["_id"]) if last_doc else 0
+        else:
+            last_doc = collection.find_one(
+                {"id": {"$exists": True}},
+                sort=[("id", -1)],
+            )
+            current_max = int(last_doc["id"]) if last_doc else 0
+
+        store.mongo_db.counters.update_one(
+            {"_id": name},
+            {"$setOnInsert": {"value": current_max}},
+            upsert=True,
+        )
+
     doc = store.mongo_db.counters.find_one_and_update(
         {"_id": name},
         {"$inc": {"value": 1}},
-        upsert=True,
         return_document=ReturnDocument.AFTER,
     )
     return int(doc["value"])
@@ -418,19 +469,33 @@ def record_score(
         )
         return
 
-    score_id = next_sequence(store, "scores")
-    store.mongo_db.scores.insert_one(
-        {
-            "id": score_id,
-            "user_id": user_id,
-            "game_session_id": session_id,
-            "game_key": game_key,
-            "result": result,
-            "score": score,
-            "detail": detail,
-            "created_at": utc_now(),
-        }
+    # Evita duplicar puntajes si el frontend envía dos veces la acción final
+    # o si una función serverless se reintenta.
+    existing_score = store.mongo_db.scores.find_one(
+        {"user_id": user_id, "game_session_id": session_id}
     )
+    if existing_score:
+        return
+
+    score_id = next_sequence(store, "scores")
+    try:
+        store.mongo_db.scores.insert_one(
+            {
+                "id": score_id,
+                "user_id": user_id,
+                "game_session_id": session_id,
+                "game_key": game_key,
+                "result": result,
+                "score": score,
+                "detail": detail,
+                "created_at": utc_now(),
+            }
+        )
+    except Exception as exc:
+        # Si el puntaje ya fue creado por una request simultánea, no rompas el juego.
+        if "duplicate key error" in str(exc):
+            return
+        raise
 
 
 class AppHandler(BaseHTTPRequestHandler):
