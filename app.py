@@ -11,6 +11,7 @@ import secrets
 import sqlite3
 import tempfile
 import time
+from dotenv import load_dotenv
 from datetime import datetime
 from http import HTTPStatus
 from http.cookies import SimpleCookie
@@ -32,6 +33,8 @@ from api_error import ApiError
 from juegos import ACTIONS, GAMES, PUBLIC, STARTERS
 
 ROOT_DIR = Path(__file__).resolve().parent
+load_dotenv(ROOT_DIR / ".env")
+
 STATIC_DIR = ROOT_DIR / "static"
 IS_SERVERLESS = bool(os.getenv("VERCEL")) or bool(os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
 DATA_DIR = Path(tempfile.gettempdir()) / "los_idos_data" if IS_SERVERLESS else ROOT_DIR / "data"
