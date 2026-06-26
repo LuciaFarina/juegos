@@ -449,19 +449,26 @@ class AppHandler(BaseHTTPRequestHandler):
         try:
             parsed = urlparse(self.path)
             path = parsed.path
+
             if path == "/":
                 return self.serve_file(STATIC_DIR / "index.html", "text/html; charset=utf-8")
+
             if path.startswith("/static/"):
                 rel = path.removeprefix("/static/")
                 safe_rel = Path(rel)
                 if ".." in safe_rel.parts:
                     raise ApiError("Ruta inválida", HTTPStatus.FORBIDDEN)
                 return self.serve_file(STATIC_DIR / safe_rel)
+
             if path.startswith("/api/"):
                 return self.route_api(path, parse_qs(parsed.query))
+
             raise ApiError("No encontrado", HTTPStatus.NOT_FOUND)
+
         except ApiError as exc:
             self.json_response({"ok": False, "error": exc.message}, exc.status)
+        except (ConnectionAbortedError, BrokenPipeError, ConnectionResetError):
+            return
         except Exception as exc:
             self.json_response({"ok": False, "error": f"Error interno: {exc}"}, HTTPStatus.INTERNAL_SERVER_ERROR)
 
@@ -527,12 +534,18 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
+
         if cookie:
             self.send_header("Set-Cookie", f"session_token={cookie}; HttpOnly; SameSite=Lax; Path=/")
+
         if clear_cookie:
             self.send_header("Set-Cookie", "session_token=; Max-Age=0; HttpOnly; SameSite=Lax; Path=/")
-        self.end_headers()
-        self.wfile.write(raw)
+
+        try:
+            self.end_headers()
+            self.wfile.write(raw)
+        except (ConnectionAbortedError, BrokenPipeError, ConnectionResetError):
+            return
 
     def route_api(self, path: str, query: dict[str, list[str]]) -> None:
         method = self.command.upper()
