@@ -7,7 +7,7 @@ import html
 import json
 import os
 import re
-import secretsa
+import secrets
 import sqlite3
 import tempfile
 import time
@@ -133,11 +133,6 @@ def migrate_sqlite_to_mongo() -> None:
     db.game_sessions.create_index("id", unique=True)
     db.scores.create_index([("user_id", 1), ("created_at", -1)])
     db.scores.create_index("id", unique=True)
-    db.scores.create_index(
-        "game_session_id",
-        unique=True,
-        partialFilterExpression={"game_session_id": {"$type": "int"}},
-    )
 
     for row in users:
         db.users.update_one(
