@@ -8,7 +8,10 @@ if str(ROOT_DIR) not in sys.path:
 
 from app import AppHandler, init_db
 
-init_db()
+try:
+    init_db()
+except Exception as exc:
+    print(f"init_db warning: {exc}")
 
 
 class handler(AppHandler):
