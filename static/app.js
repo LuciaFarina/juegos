@@ -583,9 +583,9 @@ function renderRps(state) {
 
 function rpsIcon(value) {
   const normalized = String(value || "").toLowerCase();
-  if (normalized.includes("piedra")) return "🪨";
-  if (normalized.includes("papel")) return "📄";
-  if (normalized.includes("tijera")) return "✂️";
+  if (normalized.includes("piedra")) return "✊";
+  if (normalized.includes("papel")) return "✋";
+  if (normalized.includes("tijera")) return "✌️";
   return "❔";
 }
 
