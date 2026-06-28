@@ -570,9 +570,9 @@ function renderRps(state) {
         state.status === "active"
           ? `
         <div class="choice-grid rps-actions">
-          <button class="secondary" data-rps="1"><span>🪨</span> Piedra</button>
-          <button class="secondary" data-rps="2"><span>📄</span> Papel</button>
-          <button class="secondary" data-rps="3"><span>✂️</span> Tijera</button>
+          <button class="secondary" data-rps="1"><span>✊</span> Piedra</button>
+          <button class="secondary" data-rps="2"><span>✋</span> Papel</button>
+          <button class="secondary" data-rps="3"><span>✌️</span> Tijera</button>
         </div>
       `
           : '<button class="primary" data-restart>Jugar de nuevo</button>'
